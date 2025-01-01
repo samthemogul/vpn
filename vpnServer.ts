@@ -5,7 +5,6 @@ import { setupTunInterface } from "./tun";
 
 const SERVER_PORT = 5555;
 const BUFFER_SIZE = 2048;
-let isSecure = false;
 
 const key = crypto.randomBytes(32); // Encryption key
 const iv = crypto.randomBytes(16); // Initialization vector
@@ -23,22 +22,19 @@ function handleSocketResponse(
   server: dgram.Socket
 ) {
   fs.write(tunFd, body, () => {
-    console.log("Written");
     const buffer = Buffer.alloc(BUFFER_SIZE);
     const bytesRead = fs.readSync(tunFd, buffer, 0, BUFFER_SIZE, null);
-    console.log(`Bytes read: ${bytesRead}`);
     const encryptedData = encrypt(buffer.slice(0, bytesRead));
 
     server.send(encryptedData, port, address, (err) => {
       if (err) console.error("Error sending packet:", err.message);
-      else console.log("Message sent to server");
+      else console.log("Message sent to client at " + address + ":" + port);
     });
   });
 }
 
 async function vpnServer() {
   const tunFd = await setupTunInterface("tun0", "10.0.0.1", "24");
-  console.log(tunFd);
   const udpServer = dgram.createSocket("udp4");
 
   udpServer.on("connection", (socket) => {
@@ -50,12 +46,11 @@ async function vpnServer() {
   });
 
   udpServer.on("message", (msg, rinfo) => {
-    let status, body;
+    let body;
     let position = 0;
     body = msg.slice(position);
     if (msg.slice(position, position + 10).toString() === "----secure") {
       position += 10;
-      console.log("Message:", body.toString()); // Log message
       handleSocketResponse(tunFd, body, rinfo.port, rinfo.address, udpServer);
     } else {
       console.log("Initializing handshake");
@@ -69,7 +64,6 @@ async function vpnServer() {
         if (err) {
           console.log("Error sending credentials");
         } else {
-          isSecure = true;
           handleSocketResponse(
             tunFd,
             body,
