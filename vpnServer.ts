@@ -33,8 +33,29 @@ function handleSocketResponse(
   });
 }
 
+async function generateTunDevice() {
+  let index = 0;
+
+  while (true) {
+    const deviceName = `tun${index}`;
+    try {
+      const tunFd = await setupTunInterface(deviceName, `10.0.${index}.1`, "24");
+      console.log(`TUN device ${deviceName} created`);
+      return tunFd;
+    } catch (error) {
+      if (error.message.includes("Device or resource busy")) {
+        console.warn(`Device ${deviceName} already exists. Trying next index...`);
+        index++;
+      } else {
+        console.error(`Error creating TUN device: ${error.message}`);
+        throw error;
+      }
+    }
+  }
+}
+
 async function vpnServer() {
-  const tunFd = await setupTunInterface("tun0", "10.0.0.1", "24");
+  const tunFd = await generateTunDevice();
   const udpServer = dgram.createSocket("udp4");
 
   udpServer.on("connection", (socket) => {
@@ -82,5 +103,3 @@ async function vpnServer() {
 }
 
 vpnServer().catch((err) => console.error("Server error:", err));
-
-
